@@ -1,3 +1,4 @@
+# meet_bot.py — FULLY FIXED MEET API v2 (VALID OPEN CONFIG)
 import os
 import logging
 import threading
@@ -38,8 +39,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def meet(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         client = get_meet_client()
-        # FIXED: Empty body = default open access (anyone joins instantly, no knocking/host approval)
-        response = client.spaces().create(body={}).execute()
+        # FIXED: Valid config for OPEN access (no knocking/host approval)
+        response = client.spaces().create(
+            body={
+                "config": {
+                    "accessType": "OPEN",  # Anyone can join
+                    "entryPointAccess": "OPEN"  # Direct entry via link
+                }
+            }
+        ).execute()
         link = response['meetingUri']
         await update.message.reply_text(f"Instant Meet (open to all!)\nJoin → {link}")
     except Exception as e:
@@ -50,7 +58,14 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if "meet" in query or query == "" or "link" in query or "room" in query:
         try:
             client = get_meet_client()
-            response = client.spaces().create(body={}).execute()  # Same fix
+            response = client.spaces().create(
+                body={
+                    "config": {
+                        "accessType": "OPEN",
+                        "entryPointAccess": "OPEN"
+                    }
+                }
+            ).execute()
             link = response['meetingUri']
 
             results = [
