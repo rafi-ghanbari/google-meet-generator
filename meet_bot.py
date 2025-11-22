@@ -1,5 +1,6 @@
 import os
 import logging
+import threading
 from telegram import Update, InlineQueryResultArticle, InputTextMessageContent
 from telegram.ext import Application, CommandHandler, ContextTypes, InlineQueryHandler
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -8,6 +9,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from dotenv import load_dotenv
 import uuid
+from flask import Flask
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -36,13 +38,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def meet(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         client = get_meet_client()
-        # THIS IS THE MAGIC LINE
         response = client.spaces().create(
             body={
                 "config": {
-                    "accessType": "OPEN",           # anyone can join
-                    "entryType": "DIRECT",           # no knocking
-                    "requireJoinApproval": False     # no host approval
+                    "accessType": "OPEN",
+                    "entryType": "DIRECT",
+                    "requireJoinApproval": False
                 }
             }
         ).execute()
@@ -51,7 +52,6 @@ async def meet(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"Error: {e}")
 
-# Same fix for inline mode
 async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.inline_query.query.lower()
     if "meet" in query or query == "" or "link" in query or "room" in query:
@@ -82,15 +82,30 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             pass
 
+def run_flask():
+    app = Flask(__name__)
+    @app.route('/', defaults={'path': ''})
+    @app.route('/<path:path>')
+    def catch_all(path):
+        return "OK"  # Dummy response for Render health checks
+    port = int(os.environ.get('PORT', 10000))
+    app.run(host='0.0.0.0', port=port)
+
 def main():
     token = os.getenv("BOT_TOKEN")
-    app = Application.builder().token(token).build()
+    if not token:
+        raise ValueError("BOT_TOKEN not in .env")
 
+    # Start Flask in a thread for health checks
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+
+    app = Application.builder().token(token).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("meet", meet))
-    app.add_handler(InlineQueryHandler(inline_query))  # This line enables @bot meet
+    app.add_handler(InlineQueryHandler(inline_query))
 
-    print("Bot is running with INLINE MODE! Try @yourbot meet anywhere")
+    print("Bot is running with health check! Try /meet")
     app.run_polling()
 
 if __name__ == '__main__':
