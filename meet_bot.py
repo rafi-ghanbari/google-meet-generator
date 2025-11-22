@@ -1,14 +1,13 @@
 import os
 import logging
-from telegram import Update, Bot
-from telegram.ext import CommandHandler, InlineQueryHandler, ContextTypes
-from telegram import InlineQueryResultArticle, InputTextMessageContent
+import telebot
+from telebot import types
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
+from flask import Flask, request
 import uuid
-from flask import Flask, request, abort
 
 logging.basicConfig(level=logging.INFO)
 
@@ -30,49 +29,52 @@ def get_meet_client():
     return build('meet', 'v2', credentials=creds,
                  discoveryServiceUrl='https://meet.googleapis.com/$discovery/rest?version=v2')
 
-def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    update.message.reply_text("Instant Meet Bot\nUse /meet or @yourbot meet in any chat!")
+# Bot setup
+token = os.getenv("BOT_TOKEN")
+bot = telebot.TeleBot(token)
 
-def meet(update: Update, context: ContextTypes.DEFAULT_TYPE):
+@bot.message_handler(commands=['start'])
+def start(message):
+    bot.reply_to(message, "Instant Meet Bot\nUse /meet or @yourbot meet in any chat!")
+
+@bot.message_handler(commands=['meet'])
+def meet(message):
     try:
         client = get_meet_client()
         response = client.spaces().create(body={}).execute()  
         link = response['meetingUri']
-        update.message.reply_text(f"Instant Meet (open to all!)\nJoin → {link}")
+        bot.reply_to(message, f"Instant Meet (open to all!)\nJoin → {link}")
     except Exception as e:
-        update.message.reply_text(f"Error: {str(e)}")
+        bot.reply_to(message, f"Error: {str(e)}")
 
-def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.inline_query.query.lower()
-    if "meet" in query or not query:
-        try:
-            client = get_meet_client()
-            response = client.spaces().create(body={}).execute()
-            link = response['meetingUri']
-            results = [InlineQueryResultArticle(
-                id=str(uuid.uuid4()),
-                title="Instant Open Google Meet",
-                description="Anyone can join instantly!",
-                input_message_content=InputTextMessageContent(f"Open Meet → {link}")
-            )]
-            update.inline_query.answer(results)
-        except Exception as e:
-            pass
+@bot.inline_handler(lambda query: 'meet' in query.query.lower() or not query.query)
+def inline_query(query):
+    try:
+        client = get_meet_client()
+        response = client.spaces().create(body={}).execute()
+        link = response['meetingUri']
+        r = types.InlineQueryResultArticle(
+            id=str(uuid.uuid4()),
+            title="Instant Open Google Meet",
+            description="Anyone can join instantly!",
+            input_message_content=types.InputTextMessageContent(f"Open Meet → {link}")
+        )
+        bot.answer_inline_query(query.id, [r], cache_time=0)
+    except Exception as e:
+        pass
 
+# Flask webhook
 app = Flask(__name__)
-token = os.getenv("BOT_TOKEN")
-bot = Bot(token=token)
-dispatcher = bot.dispatcher  # For handlers
-
-dispatcher.add_handler(CommandHandler("start", start))
-dispatcher.add_handler(CommandHandler("meet", meet))
-dispatcher.add_handler(InlineQueryHandler(inline_query))
 
 @app.route(f"/{token}", methods=["POST"])
 def webhook():
-    update = Update.de_json(request.get_json(force=True), bot)
-    dispatcher.process_update(update)
-    return "OK"
+    if request.headers.get('content-type') == 'application/json':
+        json_string = request.get_data().decode('utf-8')
+        update = telebot.types.Update.de_json(json_string)
+        bot.process_new_updates([update])
+        return ''
+    else:
+        abort(403)
 
 @app.route("/")
 def health():

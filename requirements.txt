@@ -1,6 +1,6 @@
-python-telegram-bot==21.5
+pyTelegramBotAPI==4.15.0
 google-api-python-client>=2.111.0
 google-auth-oauthlib
 google-auth-httplib2
 python-dotenv
-flask==3.0.3 
+flask==3.0.3
