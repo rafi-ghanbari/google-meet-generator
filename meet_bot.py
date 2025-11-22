@@ -38,15 +38,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def meet(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         client = get_meet_client()
-        response = client.spaces().create(
-            body={
-                "config": {
-                    "accessType": "OPEN",
-                    "entryType": "DIRECT",
-                    "requireJoinApproval": False
-                }
-            }
-        ).execute()
+        # FIXED: Empty body = default open access (anyone joins instantly, no knocking/host approval)
+        response = client.spaces().create(body={}).execute()
         link = response['meetingUri']
         await update.message.reply_text(f"Instant Meet (open to all!)\nJoin → {link}")
     except Exception as e:
@@ -57,15 +50,7 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if "meet" in query or query == "" or "link" in query or "room" in query:
         try:
             client = get_meet_client()
-            response = client.spaces().create(
-                body={
-                    "config": {
-                        "accessType": "OPEN",
-                        "entryType": "DIRECT",
-                        "requireJoinApproval": False
-                    }
-                }
-            ).execute()
+            response = client.spaces().create(body={}).execute()  # Same fix
             link = response['meetingUri']
 
             results = [
@@ -87,7 +72,7 @@ def run_flask():
     @app.route('/', defaults={'path': ''})
     @app.route('/<path:path>')
     def catch_all(path):
-        return "OK"  # Dummy response for Render health checks
+        return "OK"  # Dummy for Render health checks
     port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port)
 
@@ -96,7 +81,7 @@ def main():
     if not token:
         raise ValueError("BOT_TOKEN not in .env")
 
-    # Start Flask in a thread for health checks
+    # Flask thread for Render port fix
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
 
