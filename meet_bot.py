@@ -36,34 +36,51 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def meet(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         client = get_meet_client()
-        response = client.spaces().create(body={}).execute()
+        # THIS IS THE MAGIC LINE
+        response = client.spaces().create(
+            body={
+                "config": {
+                    "accessType": "OPEN",           # anyone can join
+                    "entryType": "DIRECT",           # no knocking
+                    "requireJoinApproval": False     # no host approval
+                }
+            }
+        ).execute()
         link = response['meetingUri']
-        await update.message.reply_text(f"Instant Meet ready!\nJoin → {link}")
+        await update.message.reply_text(f"Instant Meet (open to all!)\nJoin → {link}")
     except Exception as e:
         await update.message.reply_text(f"Error: {e}")
 
-# THIS IS THE INLINE MAGIC
+# Same fix for inline mode
 async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.inline_query.query.lower()
     if "meet" in query or query == "" or "link" in query or "room" in query:
         try:
             client = get_meet_client()
-            response = client.spaces().create(body={}).execute()
+            response = client.spaces().create(
+                body={
+                    "config": {
+                        "accessType": "OPEN",
+                        "entryType": "DIRECT",
+                        "requireJoinApproval": False
+                    }
+                }
+            ).execute()
             link = response['meetingUri']
 
             results = [
                 InlineQueryResultArticle(
                     id=str(uuid.uuid4()),
-                    title="Instant Google Meet",
-                    description="Click to send a fresh Meet link",
+                    title="Instant Open Google Meet",
+                    description="Anyone can join instantly — no waiting!",
                     input_message_content=InputTextMessageContent(
-                        f"Instant Meet created!\nJoin here → {link}"
+                        f"Open Meet — anyone can join!\nJoin → {link}"
                     )
                 )
             ]
             await update.inline_query.answer(results, cache_time=1)
         except Exception as e:
-            pass  # silently fail if Meet API is slow
+            pass
 
 def main():
     token = os.getenv("BOT_TOKEN")
