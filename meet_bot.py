@@ -1,7 +1,5 @@
-# meet_bot.py — FULLY FIXED MEET API v2 (VALID OPEN CONFIG)
 import os
 import logging
-import threading
 from telegram import Update, InlineQueryResultArticle, InputTextMessageContent
 from telegram.ext import Application, CommandHandler, ContextTypes, InlineQueryHandler
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -10,7 +8,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from dotenv import load_dotenv
 import uuid
-from flask import Flask
+from flask import Flask, request, abort
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -39,12 +37,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def meet(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         client = get_meet_client()
-        # FIXED: Valid config for OPEN access (no knocking/host approval)
         response = client.spaces().create(
             body={
                 "config": {
-                    "accessType": "OPEN",  # Anyone can join
-                    "entryPointAccess": "OPEN"  # Direct entry via link
+                    "accessType": "OPEN"  
                 }
             }
         ).execute()
@@ -61,8 +57,7 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
             response = client.spaces().create(
                 body={
                     "config": {
-                        "accessType": "OPEN",
-                        "entryPointAccess": "OPEN"
+                        "accessType": "OPEN"
                     }
                 }
             ).execute()
@@ -82,31 +77,38 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             pass
 
-def run_flask():
-    app = Flask(__name__)
-    @app.route('/', defaults={'path': ''})
-    @app.route('/<path:path>')
-    def catch_all(path):
-        return "OK"  # Dummy for Render health checks
-    port = int(os.environ.get('PORT', 10000))
-    app.run(host='0.0.0.0', port=port)
+def create_app():
+    flask_app = Flask(__name__)
+    application = Application.builder().token(os.getenv("BOT_TOKEN")).build()
+
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("meet", meet))
+    application.add_handler(InlineQueryHandler(inline_query))
+
+    @flask_app.route(f"/{os.getenv('BOT_TOKEN')}", methods=["POST"])
+    async def webhook():
+        if request.headers.get("content-type") == "application/json":
+            json_string = await request.get_json()
+            update = Update.de_json(json_string, application.bot)
+            await application.process_update(update)
+        else:
+            abort(403)
+        return "OK"
+
+    # Health check for Render
+    @flask_app.route("/")
+    def health():
+        return "Bot is alive!"
+
+    return flask_app, application
 
 def main():
-    token = os.getenv("BOT_TOKEN")
-    if not token:
-        raise ValueError("BOT_TOKEN not in .env")
+    if not os.getenv("BOT_TOKEN"):
+        raise ValueError("BOT_TOKEN not set")
 
-    # Flask thread for Render port fix
-    flask_thread = threading.Thread(target=run_flask, daemon=True)
-    flask_thread.start()
+    flask_app, application = create_app()
+    port = int(os.environ.get("PORT", 10000))
+    flask_app.run(host="0.0.0.0", port=port, debug=False)
 
-    app = Application.builder().token(token).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("meet", meet))
-    app.add_handler(InlineQueryHandler(inline_query))
-
-    print("Bot is running with health check! Try /meet")
-    app.run_polling()
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
