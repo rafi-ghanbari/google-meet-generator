@@ -41,9 +41,16 @@ def start(message):
 def meet(message):
     try:
         client = get_meet_client()
-        response = client.spaces().create(body={}).execute()  
+        response = client.spaces().create(
+            body={
+                "config": {
+                    "accessType": "OPEN",  # No knocking—anyone with link joins directly
+                    "entryPointAccess": "OPEN"  # Direct entry via link, no approval
+                }
+            }
+        ).execute()
         link = response['meetingUri']
-        bot.reply_to(message, f"Instant Meet (open to all!)\nJoin → {link}")
+        bot.reply_to(message, f"Instant Meet (fully open—no approval needed!)\nJoin → {link}")
     except Exception as e:
         bot.reply_to(message, f"Error: {str(e)}")
 
@@ -51,12 +58,19 @@ def meet(message):
 def inline_query(query):
     try:
         client = get_meet_client()
-        response = client.spaces().create(body={}).execute()
+        response = client.spaces().create(
+            body={
+                "config": {
+                    "accessType": "OPEN",
+                    "entryPointAccess": "OPEN"
+                }
+            }
+        ).execute()
         link = response['meetingUri']
         r = types.InlineQueryResultArticle(
             id=str(uuid.uuid4()),
             title="Instant Open Google Meet",
-            description="Anyone can join instantly!",
+            description="Anyone can join and speak—no host approval!",
             input_message_content=types.InputTextMessageContent(f"Open Meet → {link}")
         )
         bot.answer_inline_query(query.id, [r], cache_time=0)
