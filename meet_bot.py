@@ -44,8 +44,8 @@ def meet(message):
         response = client.spaces().create(
             body={
                 "config": {
-                    "accessType": "OPEN",  # Anyone with link can discover/join
-                    "entryPointAccess": "ALL"  # All entry points allowed—direct join, no knocking/approval
+                    "accessType": "OPEN",  
+                    "entryPointAccess": "ALL"  
                 }
             }
         ).execute()
